@@ -108,15 +108,17 @@ def get_OS(project_soup):
 
 def import_data():
     # 1. connect to DB/ set files
+    
     STORAGE_MODE = os.getenv('STORAGE_MODE', 'db')
 
     if STORAGE_MODE =='db':
+        print('Connecting to DB')
         alambique = connect_db()
     else:
         OUTPUT_PATH = os.getenv('OUTPUT_PATH', './data/sourceforge.json')
 
-    
     # Go through pages and get all entries
+    print( 'Getting all entries')
     session = requests.Session()
     url=os.getenv('URL_SOURCEFORGE_PACKAGES', 'https://sourceforge.net/directory/science-engineering/bioinformatics/')
     
@@ -153,6 +155,7 @@ def import_data():
             entry_all['@source_url'] = 'https://sourceforge.net/projects/' + name
 
             if STORAGE_MODE=='db':
+                print('Pushing entry to db')
                 log = push_entry(entry_all, alambique, log)
             else:
                 log = save_entry(entry_all, OUTPUT_PATH, log)

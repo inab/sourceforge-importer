@@ -1,6 +1,6 @@
 # SourceForge recipes importer 
 
-This program extracts metadata from SourceForge recipes and store it either in a JSON file or pushed to a MongoDB database.
+This program extracts Bioinformatics software metadata from SourceForge and store it either in a JSON file or pushed to a MongoDB database.
 
 ## Set-up and Usage
 
