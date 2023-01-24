@@ -153,8 +153,7 @@ def import_data():
             entry_all['@source_url'] = 'https://sourceforge.net/projects/' + name
 
             if STORAGE_MODE=='db':
-                #log = push_entry(entry_all, alambique, log)
-                print(entry_all)
+                log = push_entry(entry_all, alambique, log)
             else:
                 log = save_entry(entry_all, OUTPUT_PATH, log)
 
