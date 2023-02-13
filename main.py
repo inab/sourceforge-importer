@@ -123,11 +123,17 @@ def import_data():
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         )
+    parser.add_argument(
+        "--logdir", "-d",
+        help=("Set the logging directory"),
+        default="./logs",
+    )
 
     arguments = parser.parse_args()
     ## 0.2. setting log level
     numeric_level = getattr(logging, arguments.loglevel.upper())
-    logging.basicConfig(level=numeric_level, format='%(asctime)s - %(levelname)s - %(message)s')
+    logs_dir = arguments.logdir
+    logging.basicConfig(level=numeric_level, format='%(asctime)s - %(levelname)s - %(message)s', filename=f'{logs_dir}/summary.log', filemode='w')
     
     ## 0.3. getting env variables
     load_dotenv()

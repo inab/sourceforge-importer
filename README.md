@@ -45,8 +45,10 @@ If the ENV variables are stored in an `.env` file:
 3. Execute the importer
 
     ```sh
-    python3 main.py -l=DEBUG
+    python3 main.py -l=[log-level] -d=[log-directory]
     ``` 
+    - `log-level` is the level of logging. It can be `DEBUG`, `INFO`, `WARNING`, `ERROR` or `CRITICAL`.
+    - `log-directory` is the directory where the log file will be stored. If not specified, the log file will be stored in the current directory. 
 
 > This program has been successfully executed using Python 3.8 and 3.9.
 
