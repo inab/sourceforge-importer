@@ -1,5 +1,9 @@
 import requests
 import os
+import logging
+import argparse
+
+from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 
 from utils import push_entry, save_entry, connect_db
@@ -107,12 +111,32 @@ def get_OS(project_soup):
 
 
 def import_data():
+     ## 0.1. getting arguments
+    parser = argparse.ArgumentParser(
+            prog='',
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
+    parser.add_argument(
+        "--loglevel", "-l",
+        help=("Set the logging level"),
+        required=False,
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        )
+
+    arguments = parser.parse_args()
+    ## 0.2. setting log level
+    numeric_level = getattr(logging, arguments.loglevel.upper())
+    logging.basicConfig(level=numeric_level, format='%(asctime)s - %(levelname)s - %(message)s')
+    
+    ## 0.3. getting env variables
+    load_dotenv()
+
     # 1. connect to DB/ set files
     
     STORAGE_MODE = os.getenv('STORAGE_MODE', 'db')
 
     if STORAGE_MODE =='db':
-        print('Connecting to DB')
         alambique = connect_db()
     else:
         OUTPUT_PATH = os.getenv('OUTPUT_PATH', './data/sourceforge.json')

@@ -16,7 +16,7 @@ The easiest way to run this importer is by using a docker image.
 2. Run the container. 
 If the ENV variables are stored in an `.env` file: 
     ```sh
-    docker run --name [container-name] --env-file registry.gitlab.bsc.es/inb/elixir/software-observatory/sourceforge-importer
+    docker run --name [container-name] --env-file .env registry.gitlab.bsc.es/inb/elixir/software-observatory/sourceforge-importer
     ```
 
 > :bulb: **Using `linux/amd64` architecture to run (and build) the container** 
@@ -45,7 +45,7 @@ If the ENV variables are stored in an `.env` file:
 3. Execute the importer
 
     ```sh
-    python3 main.py
+    python3 main.py -l=DEBUG
     ``` 
 
 > This program has been successfully executed using Python 3.8 and 3.9.
