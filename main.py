@@ -9,7 +9,6 @@ from bs4 import BeautifulSoup
 from utils import push_entry, save_entry, connect_db
 
 
-
 def get_entries(soup, projects):
     results = soup.find_all('div', attrs={"class":"result-heading-texts"}) # results panel
     #entries = results.find('a')
@@ -126,7 +125,7 @@ def import_data():
     parser.add_argument(
         "--logdir", "-d",
         help=("Set the logging directory"),
-        default="./logs",
+        default="./logs/summary.log",
     )
 
     arguments = parser.parse_args()
@@ -137,6 +136,8 @@ def import_data():
     
     ## 0.3. getting env variables
     load_dotenv()
+
+    logging.info('connecting to database')
 
     # 1. connect to DB/ set files
     
@@ -159,36 +160,44 @@ def import_data():
         projects = get_entries(soup, projects)
         url = get_next(soup)
     
-    print(f"Number of bioinformatics linux projects in SourceForge{len(projects)}")
+    logging.info(f"Number of bioinformatics linux projects in SourceForge{len(projects)}")
 
-    log = {'names':[],
-       'n_ok':0,
-       'errors': []}
-    # Extract information from each entry
-    for entry in projects:
-        name = entry.split('/')[-2]
-        entry_all = {}
-        soup = get_soup(entry)
-        if soup:
-            entry_all['last_update'] = get_lastUpdate(soup)
-            entry_all['description'] = get_description(soup)
-            info = get_project_info(soup)
-            entry_all['registered'] = info["registered"]
-            entry_all['license'] = info["license"]
-            entry_all['operating_systems'] = get_OS(soup)
-            entry_all['repository'] = 'https://sourceforge.net/projects/' + name
-            entry_all['homepage'] = get_homepage(soup)
-            entry_all['name'] = name
+    if projects:
+        # Extract information from each entry
+        for entry in projects:
+            name = entry.split('/')[-2]
+            entry_all = {}
+            soup = get_soup(entry)
+            if soup:
+                entry_all['last_update'] = get_lastUpdate(soup)
+                entry_all['description'] = get_description(soup)
+                info = get_project_info(soup)
+                entry_all['registered'] = info["registered"]
+                entry_all['license'] = info["license"]
+                entry_all['operating_systems'] = get_OS(soup)
+                entry_all['repository'] = 'https://sourceforge.net/projects/' + name
+                entry_all['homepage'] = get_homepage(soup)
+                entry_all['name'] = name
+                
+                entry_all['@id'] = 'https://openebench.bsc.es/monitor/tool/sourceforge:{name}'.format(name=name)
+                entry_all['@data_source'] = 'sourceforge'
+                entry_all['@source_url'] = 'https://sourceforge.net/projects/' + name
+
+                if STORAGE_MODE=='db':
+                    push_entry(entry_all, alambique)
+                else:
+                    save_entry(entry_all, OUTPUT_PATH)
             
-            entry_all['@id'] = 'https://openebench.bsc.es/monitor/tool/sourceforge:{name}'.format(name=name)
-            entry_all['@data_source'] = 'sourceforge'
-            entry_all['@source_url'] = 'https://sourceforge.net/projects/' + name
-
-            if STORAGE_MODE=='db':
-                print('Pushing entry to db')
-                log = push_entry(entry_all, alambique, log)
             else:
-                log = save_entry(entry_all, OUTPUT_PATH, log)
+                logging.warning(f"error with {entry['name']} - empty")
+        
+        logging.info("end_importation")
+
+    else:
+        logging.error('error - crucial_object_empty')
+        logging.error('No projects to process. Exiting...')
+        logging.info("end_importation")
+        exit(1)
 
 
 if __name__ == "__main__":

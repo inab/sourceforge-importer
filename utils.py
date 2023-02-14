@@ -3,7 +3,7 @@ import os
 import logging
 from pymongo import MongoClient
 
-def push_entry(tool:dict, collection:'pymongo.collection.Collection', log:dict):
+def push_entry(tool:dict, collection:'pymongo.collection.Collection'):
     '''Push tool to collection.
 
     tool: dictionary. Must have at least an '@id' key.
@@ -17,17 +17,16 @@ def push_entry(tool:dict, collection:'pymongo.collection.Collection', log:dict):
     try:
         updateResult = collection.update_many({'@id':tool['@id']}, { '$set': tool }, upsert=True)
     except Exception as e:
-        log['errors'].append({'file':tool,'error':e})
-        logging.warning(f'pushed_to_db - sourceforge - ERROR')
-        return(log)
+        logging.warning(f"error with {tool['@id']} - pushing_to_db")
+        logging.warning(e)
+
     else:
-        log['n_ok'] += 1
-        logging.info(f'pushed_to_db - sourceforge - OK')
+        logging.info(f"pushed_to_db_ok - {tool['@id']}")
     finally:
-        return(log)
+        return
 
 
-def save_entry(tool, output_file, log):
+def save_entry(tool, output_file):
     '''Save tool to file.
 
     tool: dictionary. Must have at least an '@id' key.
@@ -53,14 +52,15 @@ def save_entry(tool, output_file, log):
                 json.dump(data, outfile)
 
     except Exception as e:
-        log['errors'].append({'file':tool['name'],'error':e})
-        raise
-        # return(log)
+        logging.warning(f"error with {tool['@id']} - pushing_to_db")
+        logging.warning(e)
 
     else:
-        log['n_ok'] += 1
+        logging.info(f"pushed_to_db_ok - {tool['@id']}")
+
     finally:
-        return(log)
+        return
+
 
 def connect_db():
     '''Connect to MongoDB and return the database and collection objects.
