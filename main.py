@@ -132,7 +132,7 @@ def import_data():
     ## 0.2. setting log level
     numeric_level = getattr(logging, arguments.loglevel.upper())
     logs_dir = arguments.logdir
-    logging.basicConfig(level=numeric_level, format='%(asctime)s - %(levelname)s - sourceforge - %(message)s', filename=f'{logs_dir}/summary.log', filemode='w')
+    logging.basicConfig(level=numeric_level, format='%(asctime)s - %(levelname)s - sourceforge - %(message)s', filename=f'{logs_dir}', filemode='w')
     
     ## 0.3. getting env variables
     load_dotenv()
