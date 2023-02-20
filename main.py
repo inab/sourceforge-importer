@@ -137,6 +137,8 @@ def import_data():
     ## 0.3. getting env variables
     load_dotenv()
 
+    logging.info("state_importation - 1")
+
     logging.info('connecting to database')
 
     # 1. connect to DB/ set files
@@ -191,12 +193,12 @@ def import_data():
             else:
                 logging.warning(f"error with {entry['name']} - empty")
         
-        logging.info("end_importation")
+        logging.info("state_importation - 0")
 
     else:
         logging.error('error - crucial_object_empty')
         logging.error('No projects to process. Exiting...')
-        logging.info("end_importation")
+        logging.info("state_importation - 0")
         exit(1)
 
 

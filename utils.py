@@ -67,8 +67,8 @@ def connect_db():
 
     '''
     ALAMBIQUE = os.getenv('ALAMBIQUE', 'alambique')
-    HOST = os.getenv('HOST', 'localhost')
-    PORT = os.getenv('PORT', 27017)
+    HOST = os.getenv('DBHOST', 'localhost')
+    PORT = os.getenv('DBPORT', 27017)
     DB = os.getenv('DB', 'observatory')
     
     client = MongoClient(HOST, int(PORT))
