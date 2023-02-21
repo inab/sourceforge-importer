@@ -154,7 +154,7 @@ def import_data():
         # Go through pages and get all entries
         print( 'Getting all entries')
         session = requests.Session()
-        url=os.getenv('URL_SOURCEFORGE_PACKAGES', 'https://sourceforge.net/directory/science-engineering/bioinformatics/')
+        url=os.getenv('URL_SOURCEFORGE_PACKAGES', 'https://sourceforge.net/directory/bio-informatics/')
         
         projects = []
         while url:
