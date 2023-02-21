@@ -35,4 +35,4 @@ This program extracts Bioinformatics software metadata from SourceForge and stor
 | DB         |  Name of database where output will be pushed |   `observatory`      |  Only used when STORAGE_MODE is `db`      |
 | ALAMBIQUE |  Name of database where output will be pushed  |   `alambique`        |  Only used when STORAGE_MODE is `db`      |
 | OUTPUT_PATH      |  Path to output file                    | `./data/bioconda.json` |  Only used when STORAGE_MODE is `filesystem` | 
-| URL_SOURCEFORGE_PACKAGES | URL to SourceForge packages of our interest | `https://sourceforge.net/directory/science-engineering/bioinformatics/` | |
+| URL_SOURCEFORGE_PACKAGES | URL to SourceForge packages of our interest | `https://sourceforge.net/directory/bio-informatics/` | |

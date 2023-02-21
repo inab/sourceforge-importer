@@ -19,7 +19,7 @@ def get_entries(soup, projects):
 
 
 def get_next(soup):
-    URL=os.getenv('URL_SOURCEFORGE_PACKAGES', 'https://sourceforge.net/directory/science-engineering/bioinformatics/')
+    URL=os.getenv('URL_SOURCEFORGE_PACKAGES', 'https://sourceforge.net/directory/bio-informatics/')
     try:
         next_href = soup.find('li', attrs={"class":"pagination-next"}).find('a')['href']
         page = next_href.split('/')[-1]
