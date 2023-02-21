@@ -110,96 +110,105 @@ def get_OS(project_soup):
 
 
 def import_data():
-     ## 0.1. getting arguments
-    parser = argparse.ArgumentParser(
-            prog='',
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    try:
+        ## 0.1. getting arguments
+        parser = argparse.ArgumentParser(
+                prog='',
+                formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-    parser.add_argument(
-        "--loglevel", "-l",
-        help=("Set the logging level"),
-        required=False,
-        default="INFO",
-        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        parser.add_argument(
+            "--loglevel", "-l",
+            help=("Set the logging level"),
+            required=False,
+            default="INFO",
+            choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+            )
+        parser.add_argument(
+            "--logdir", "-d",
+            help=("Set the logging directory"),
+            default="./logs/summary.log",
         )
-    parser.add_argument(
-        "--logdir", "-d",
-        help=("Set the logging directory"),
-        default="./logs/summary.log",
-    )
 
-    arguments = parser.parse_args()
-    ## 0.2. setting log level
-    numeric_level = getattr(logging, arguments.loglevel.upper())
-    logs_dir = arguments.logdir
-    logging.basicConfig(level=numeric_level, format='%(asctime)s - %(levelname)s - sourceforge - %(message)s', filename=f'{logs_dir}', filemode='w')
-    
-    ## 0.3. getting env variables
-    load_dotenv()
-
-    logging.info("state_importation - 1")
-
-    logging.info('connecting to database')
-
-    # 1. connect to DB/ set files
-    
-    STORAGE_MODE = os.getenv('STORAGE_MODE', 'db')
-
-    if STORAGE_MODE =='db':
-        alambique = connect_db()
-    else:
-        OUTPUT_PATH = os.getenv('OUTPUT_PATH', './data/sourceforge.json')
-
-    # Go through pages and get all entries
-    print( 'Getting all entries')
-    session = requests.Session()
-    url=os.getenv('URL_SOURCEFORGE_PACKAGES', 'https://sourceforge.net/directory/science-engineering/bioinformatics/')
-    
-    projects = []
-    while url:
-        re = session.get(url)
-        soup = BeautifulSoup(re.text, 'html5lib')
-        projects = get_entries(soup, projects)
-        url = get_next(soup)
-    
-    logging.info(f"Number of bioinformatics linux projects in SourceForge{len(projects)}")
-
-    if projects:
-        # Extract information from each entry
-        for entry in projects:
-            name = entry.split('/')[-2]
-            entry_all = {}
-            soup = get_soup(entry)
-            if soup:
-                entry_all['last_update'] = get_lastUpdate(soup)
-                entry_all['description'] = get_description(soup)
-                info = get_project_info(soup)
-                entry_all['registered'] = info["registered"]
-                entry_all['license'] = info["license"]
-                entry_all['operating_systems'] = get_OS(soup)
-                entry_all['repository'] = 'https://sourceforge.net/projects/' + name
-                entry_all['homepage'] = get_homepage(soup)
-                entry_all['name'] = name
-                
-                entry_all['@id'] = 'https://openebench.bsc.es/monitor/tool/sourceforge:{name}'.format(name=name)
-                entry_all['@data_source'] = 'sourceforge'
-                entry_all['@source_url'] = 'https://sourceforge.net/projects/' + name
-
-                if STORAGE_MODE=='db':
-                    push_entry(entry_all, alambique)
-                else:
-                    save_entry(entry_all, OUTPUT_PATH)
-            
-            else:
-                logging.warning(f"error with {entry['name']} - empty")
+        arguments = parser.parse_args()
+        ## 0.2. setting log level
+        numeric_level = getattr(logging, arguments.loglevel.upper())
+        logs_dir = arguments.logdir
+        logging.basicConfig(level=numeric_level, format='%(asctime)s - %(levelname)s - sourceforge - %(message)s', filename=f'{logs_dir}', filemode='w')
         
-        logging.info("state_importation - 0")
+        ## 0.3. getting env variables
+        load_dotenv()
+
+        logging.info("state_importation - 1")
+
+        logging.info('connecting to database')
+
+        # 1. connect to DB/ set files
+        
+        STORAGE_MODE = os.getenv('STORAGE_MODE', 'db')
+
+        if STORAGE_MODE =='db':
+            alambique = connect_db()
+        else:
+            OUTPUT_PATH = os.getenv('OUTPUT_PATH', './data/sourceforge.json')
+
+        # Go through pages and get all entries
+        print( 'Getting all entries')
+        session = requests.Session()
+        url=os.getenv('URL_SOURCEFORGE_PACKAGES', 'https://sourceforge.net/directory/science-engineering/bioinformatics/')
+        
+        projects = []
+        while url:
+            re = session.get(url)
+            soup = BeautifulSoup(re.text, 'html5lib')
+            projects = get_entries(soup, projects)
+            url = get_next(soup)
+        
+        logging.info(f"Number of bioinformatics linux projects in SourceForge{len(projects)}")
+
+        if projects:
+            # Extract information from each entry
+            for entry in projects:
+                name = entry.split('/')[-2]
+                entry_all = {}
+                soup = get_soup(entry)
+                if soup:
+                    entry_all['last_update'] = get_lastUpdate(soup)
+                    entry_all['description'] = get_description(soup)
+                    info = get_project_info(soup)
+                    entry_all['registered'] = info["registered"]
+                    entry_all['license'] = info["license"]
+                    entry_all['operating_systems'] = get_OS(soup)
+                    entry_all['repository'] = 'https://sourceforge.net/projects/' + name
+                    entry_all['homepage'] = get_homepage(soup)
+                    entry_all['name'] = name
+                    
+                    entry_all['@id'] = 'https://openebench.bsc.es/monitor/tool/sourceforge:{name}'.format(name=name)
+                    entry_all['@data_source'] = 'sourceforge'
+                    entry_all['@source_url'] = 'https://sourceforge.net/projects/' + name
+
+                    if STORAGE_MODE=='db':
+                        push_entry(entry_all, alambique)
+                    else:
+                        save_entry(entry_all, OUTPUT_PATH)
+                
+                else:
+                    logging.warning(f"error with {entry['name']} - empty")
+            
+        else:
+            logging.error('error - crucial_object_empty')
+            logging.error('No projects to process. Exiting...')
+            logging.info("state_importation - 2")
+            exit(1)
+        
+    except Exception as e:
+        logging.error(f'error - {type(e).__name__}')
+        logging.info("state_importation - 2")
+        exit(1)
 
     else:
-        logging.error('error - crucial_object_empty')
-        logging.error('No projects to process. Exiting...')
         logging.info("state_importation - 0")
-        exit(1)
+    
+
 
 
 if __name__ == "__main__":
