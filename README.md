@@ -30,8 +30,11 @@ This program extracts Bioinformatics software metadata from SourceForge and stor
 | Name             | Description | Default | Notes |
 |------------------|-------------|---------|-------|
 | STORAGE_MODE     |  Specifies whether the output will be stored in filesystem (`filesystem`) or pushed to a database (`db`) |  `db` |            |
-| DBHOST       |  Host of database where output will be pushed |   `localhost`        |  Only used when STORAGE_MODE is `db`      |
-| DBPORT       |  Port of database where output will be pushed |   `27017`            |  Only used when STORAGE_MODE is `db`      |
+| HOST       |  Host of database where output will be pushed |   `localhost`        |  Only used when STORAGE_MODE is `db`      |
+| PORT       |  Port of database where output will be pushed |   `27017`            |  Only used when STORAGE_MODE is `db`      |
+| USER       |  User of database where output will be pushed |            |  Only used when STORAGE_MODE is `db`      |
+| PWD   |  Password of database where output will be pushed |            |  Only used when STORAGE_MODE is `db`      |
+| AUTH_SRC  |  Authentication source of database where output will be pushed |   `admin`  |  Only used when STORAGE_MODE is `db`      |
 | DB         |  Name of database where output will be pushed |   `observatory`      |  Only used when STORAGE_MODE is `db`      |
 | ALAMBIQUE |  Name of database where output will be pushed  |   `alambique`        |  Only used when STORAGE_MODE is `db`      |
 | OUTPUT_PATH      |  Path to output file                    | `./data/bioconda.json` |  Only used when STORAGE_MODE is `filesystem` | 
