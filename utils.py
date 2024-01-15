@@ -66,12 +66,24 @@ def connect_db():
     '''Connect to MongoDB and return the database and collection objects.
 
     '''
-    ALAMBIQUE = os.getenv('ALAMBIQUE', 'alambique')
-    HOST = os.getenv('DBHOST', 'localhost')
-    PORT = os.getenv('DBPORT', 27017)
-    DB = os.getenv('DB', 'observatory')
-    
-    client = MongoClient(HOST, int(PORT))
-    alambique = client[DB][ALAMBIQUE]
+    # variables come from .env file
+    mongoHost = os.getenv('HOST', default='localhost')
+    mongoPort = os.getenv('PORT', default='27017')
+    mongoUser = os.getenv('USER')
+    mongoPass = os.getenv('PWD')
+    mongoAuthSrc = os.getenv('AUTH_SRC', default='admin')
+    mongoDb = os.getenv('DB', default='oeb-research-software')
+    mongoAlambique = os.getenv('ALAMBIQUE', default='alambique')
+
+    # Connect to MongoDB
+    mongoClient = MongoClient(
+        host=mongoHost,
+        port=int(mongoPort),
+        username=mongoUser,
+        password=mongoPass,
+        authSource=mongoAuthSrc,
+    )
+    db = mongoClient[mongoDb]
+    alambique = db[mongoAlambique]
 
     return alambique
