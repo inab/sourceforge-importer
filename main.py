@@ -1,12 +1,11 @@
 import requests
+import sys
 import os
 import logging
 import argparse
-
-from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 
-from utils import push_entry, save_entry, connect_db
+from utils import push_entry, connect_db, add_metadata_to_entry
 
 
 def get_entries(soup, projects):
@@ -123,33 +122,18 @@ def import_data():
             default="INFO",
             choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
             )
-        parser.add_argument(
-            "--logdir", "-d",
-            help=("Set the logging directory"),
-            default="./logs/summary.log",
-        )
 
         arguments = parser.parse_args()
         ## 0.2. setting log level
         numeric_level = getattr(logging, arguments.loglevel.upper())
-        logs_dir = arguments.logdir
-        logging.basicConfig(level=numeric_level, format='%(asctime)s - %(levelname)s - sourceforge - %(message)s', filename=f'{logs_dir}', filemode='w')
-        
-        ## 0.3. getting env variables
-        load_dotenv()
+
+        logging.basicConfig(level=numeric_level, format='%(asctime)s - %(levelname)s - toolshed - %(message)s', stream=sys.stdout)
 
         logging.info("state_importation - 1")
-
         logging.info('connecting to database')
 
         # 1. connect to DB/ set files
-        
-        STORAGE_MODE = os.getenv('STORAGE_MODE', 'db')
-
-        if STORAGE_MODE =='db':
-            alambique = connect_db()
-        else:
-            OUTPUT_PATH = os.getenv('OUTPUT_PATH', './data/sourceforge.json')
+        alambique = connect_db('alambique')
 
         # Go through pages and get all entries
         print( 'Getting all entries')
@@ -181,20 +165,23 @@ def import_data():
                     entry_all['repository'] = 'https://sourceforge.net/projects/' + name
                     entry_all['homepage'] = get_homepage(soup)
                     entry_all['name'] = name
-                    
-                    entry_all['@id'] = 'https://openebench.bsc.es/monitor/tool/sourceforge:{name}'.format(name=name)
-                    entry_all['@data_source'] = 'sourceforge'
-                    entry_all['@source_url'] = 'https://sourceforge.net/projects/' + name
 
-                    if STORAGE_MODE=='db':
-                        push_entry(entry_all, alambique)
-                    else:
-                        save_entry(entry_all, OUTPUT_PATH)
-                
+                    identifier = f"sourceforge/{name}//"
+                    tool = {
+                        'data': entry_all,
+                        '_id' : identifier,
+                        '@data_source' : 'sourceforge',
+                        '@source_url' : 'https://sourceforge.net/projects/' + name
+                    }
+
+                    document_w_metadata = add_metadata_to_entry(identifier, tool, alambique)
+                    push_entry(document_w_metadata, alambique)
+                    
                 else:
                     logging.warning(f"error with {entry['name']} - empty")
             
         else:
+            logging.exception("Exception occurred")
             logging.error('error - crucial_object_empty')
             logging.error('No projects to process. Exiting...')
             logging.info("state_importation - 2")
@@ -209,8 +196,5 @@ def import_data():
         logging.info("state_importation - 0")
     
 
-
-
 if __name__ == "__main__":
-
     import_data()
