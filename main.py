@@ -178,7 +178,7 @@ def import_data():
                     push_entry(document_w_metadata, alambique)
                     
                 else:
-                    logging.warning(f"error with {entry['name']} - empty")
+                    logging.warning(f"no soup - empty")
             
         else:
             logging.exception("Exception occurred")
