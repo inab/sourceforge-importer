@@ -127,7 +127,7 @@ def import_data():
         ## 0.2. setting log level
         numeric_level = getattr(logging, arguments.loglevel.upper())
 
-        logging.basicConfig(level=numeric_level, format='%(asctime)s - %(levelname)s - toolshed - %(message)s', stream=sys.stdout)
+        logging.basicConfig(level=numeric_level, format='%(asctime)s - %(levelname)s - %(message)s', stream=sys.stdout)
 
         logging.info("state_importation - 1")
         logging.info('connecting to database')
@@ -188,6 +188,7 @@ def import_data():
             exit(1)
         
     except Exception as e:
+        logging.exception("Exception occurred")
         logging.error(f'error - {type(e).__name__}')
         logging.info("state_importation - 2")
         exit(1)
