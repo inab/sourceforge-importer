@@ -101,8 +101,6 @@ def push_entry(tool:dict, collection: Collection):
     except Exception as e:
         logging.warning(f"error - {type(e).__name__} - {e}")
 
-    else:
-        logging.info(f"pushed_to_db_ok - {tool['_id']}")
     finally:
         return
     
