@@ -3,199 +3,241 @@ import sys
 import os
 import logging
 import argparse
+import time
+import random
 from bs4 import BeautifulSoup
 
 from utils import push_entry, connect_db, add_metadata_to_entry
 
 
+DEFAULT_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (compatible; SourceForgeMetadataImporter/1.0; +your_email_or_project_url)",
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
+
+def create_session():
+    session = requests.Session()
+    session.headers.update(DEFAULT_HEADERS)
+    return session
+
+
+def get_url(session, url, max_retries=5, base_delay=2, timeout=20):
+    for attempt in range(max_retries):
+        try:
+            response = session.get(url, timeout=timeout)
+        except requests.RequestException as e:
+            logging.warning(f"Request failed for {url}: {e}")
+            sleep_time = base_delay * (2 ** attempt) + random.uniform(0, 1)
+            logging.info(f"Sleeping {sleep_time:.2f}s before retry")
+            time.sleep(sleep_time)
+            continue
+
+        if response.status_code == 200:
+            # small polite delay even on success
+            time.sleep(random.uniform(1.0, 2.5))
+            return response
+
+        if response.status_code == 429:
+            retry_after = response.headers.get("Retry-After")
+            if retry_after is not None:
+                try:
+                    sleep_time = int(retry_after)
+                except ValueError:
+                    sleep_time = base_delay * (2 ** attempt)
+            else:
+                sleep_time = base_delay * (2 ** attempt) + random.uniform(0, 1)
+
+            logging.warning(f"429 Too Many Requests for {url}. Sleeping {sleep_time:.2f}s")
+            time.sleep(sleep_time)
+            continue
+
+        if response.status_code >= 500:
+            sleep_time = base_delay * (2 ** attempt) + random.uniform(0, 1)
+            logging.warning(f"Server error {response.status_code} for {url}. Sleeping {sleep_time:.2f}s")
+            time.sleep(sleep_time)
+            continue
+
+        logging.warning(f"Unexpected status {response.status_code} for {url}")
+        return None
+
+    logging.error(f"Max retries exceeded for {url}")
+    return None
+
+
+def get_soup(session, url):
+    response = get_url(session, url)
+    if response is not None:
+        return BeautifulSoup(response.text, "html5lib")
+    return None
+
+
 def get_entries(soup, projects):
-    results = soup.find_all('div', attrs={"class":"result-heading-texts"}) # results panel
-    #entries = results.find('a')
+    results = soup.find_all('div', attrs={"class": "result-heading-texts"})
     for entry in results:
         e = entry.find('a')
-        projects.append("https://sourceforge.net" + e['href'])
-    return(projects)
+        if e and e.get('href'):
+            projects.append("https://sourceforge.net" + e['href'])
+    return projects
 
 
 def get_next(soup):
-    URL=os.getenv('URL_SOURCEFORGE_PACKAGES', 'https://sourceforge.net/directory/bio-informatics/')
+    URL = os.getenv('URL_SOURCEFORGE_PACKAGES', 'https://sourceforge.net/directory/bio-informatics/')
     try:
-        next_href = soup.find('li', attrs={"class":"pagination-next"}).find('a')['href']
+        next_href = soup.find('li', attrs={"class": "pagination-next"}).find('a')['href']
         page = next_href.split('/')[-1]
         next_url = f'{URL}{page}'
-        return(next_url)
-    except:
-        return(None)        
+        return next_url
+    except Exception:
+        return None
 
-def get_url(url):
-    session = requests.Session()
-    try:
-        re = session.get(url)
-    except:
-        print('Impossible to make the request')
-        print("problematic url: " + url)
-        return(None)
-    else:    
-        return(re)
-    
-def get_soup(url):
-    re = get_url(url)
-    if re:
-        soup = BeautifulSoup(re.text, 'html5lib')
-        return(soup)
-    else:
-        return(None)
 
 def get_lastUpdate(project_soup):
-    last_update = project_soup.find('time', attrs={"class":"dateUpdated"})['datetime']
-    return(last_update)
+    tag = project_soup.find('time', attrs={"class": "dateUpdated"})
+    return tag['datetime'] if tag and tag.has_attr('datetime') else None
+
 
 def get_description(project_soup):
-    description = project_soup.find('p', attrs={"itemprop":"description", "class":"description"})
-    #print(description)
-    if description != None:
-        description_plain = description.text
-    else:
-        description_plain = None
-    return(description_plain)
+    description = project_soup.find('p', attrs={"itemprop": "description", "class": "description"})
+    return description.text.strip() if description else None
+
 
 def get_homepage(project_soup):
-    a = project_soup.find('a', attrs={"id":"homepage"})
-    if a:
-        homep = a['href']
-    else:
-        homep = None
-    #print(homep)
-    return(homep)
-    
+    a = project_soup.find('a', attrs={"id": "homepage"})
+    return a['href'] if a and a.has_attr('href') else None
+
+
 def get_project_info(project_soup):
-    project_info = {}
-    info = project_soup.find_all('section', attrs={"class":"project-info"})
-    licens = []
-    project_info['license'] = []
-    project_info['registered'] = False
-    project_info['categories'] = []
+    project_info = {
+        'license': [],
+        'registered': False,
+        'categories': []
+    }
+
+    info = project_soup.find_all('section', attrs={"class": "project-info"})
 
     for section in info:
-        if section.header:
-            #print(section.header.h4)
-            if section.header.h4.text == 'Registered':
-                registered = section.section.text.strip()
-                project_info['registered'] = registered
+        if section.header and section.header.h4:
+            if section.header.h4.text.strip() == 'Registered':
+                if section.section:
+                    project_info['registered'] = section.section.text.strip()
 
         elif section.h3:
-            if section.h3.text == "License":
-                for a in section.find_all("a"): 
-                    licens.append(a.text)
-                project_info['license'] = licens
-            if section.h3.text == "Categories":
+            heading = section.h3.text.strip()
+            if heading == "License":
+                project_info['license'] = [a.text.strip() for a in section.find_all("a")]
+            elif heading == "Categories":
                 for a in section.find_all("a"):
-                    project_info['categories'].append(a.span.text)
-                print(f"Categories: {project_info['categories']}")
-    
-    return(project_info)
+                    if a.span:
+                        project_info['categories'].append(a.span.text.strip())
+
+    return project_info
+
 
 def get_OS(project_soup):
     OS = []
-    platforms = project_soup.find_all('div', attrs={"class":"platforms"})
+    platforms = project_soup.find_all('div', attrs={"class": "platforms"})
     for span in platforms:
         if span.meta:
-            os = span.text.strip()
-            OS.append(os)
-    if len(OS)>0 and OS[0]!='':
-        oss = OS[0]
-        opsys = oss.split('\n')
-        return(opsys)
+            os_text = span.text.strip()
+            if os_text:
+                OS.append(os_text)
+
+    if OS:
+        return OS[0].split('\n')
+    return None
 
 
 def import_data():
     try:
-        ## 0.1. getting arguments
         parser = argparse.ArgumentParser(
-                prog='',
-                formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+            prog='',
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        )
 
         parser.add_argument(
             "--loglevel", "-l",
-            help=("Set the logging level"),
+            help="Set the logging level",
             required=False,
             default="INFO",
             choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-            )
+        )
 
         arguments = parser.parse_args()
-        ## 0.2. setting log level
         numeric_level = getattr(logging, arguments.loglevel.upper())
 
-        logging.basicConfig(level=numeric_level, format='%(asctime)s - %(levelname)s - %(message)s', stream=sys.stdout)
+        logging.basicConfig(
+            level=numeric_level,
+            format='%(asctime)s - %(levelname)s - %(message)s',
+            stream=sys.stdout
+        )
 
         logging.info("state_importation - 1")
         logging.info('connecting to database')
 
-        # 1. connect to DB/ set files
         alambique = connect_db('alambique')
+        session = create_session()
 
-        # Go through pages and get all entries
-        print( 'Getting all entries')
-        session = requests.Session()
-        url=os.getenv('URL_SOURCEFORGE_PACKAGES', 'https://sourceforge.net/directory/bio-informatics/')
-        
+        logging.info('Getting all entries')
+        url = os.getenv('URL_SOURCEFORGE_PACKAGES', 'https://sourceforge.net/directory/bio-informatics/')
+
         projects = []
         while url:
-            re = session.get(url)
-            soup = BeautifulSoup(re.text, 'html5lib')
+            response = get_url(session, url)
+            if response is None:
+                logging.warning(f"Could not retrieve page: {url}")
+                break
+
+            soup = BeautifulSoup(response.text, 'html5lib')
             projects = get_entries(soup, projects)
             url = get_next(soup)
-        
-        logging.info(f"Number of bioinformatics linux projects in SourceForge{len(projects)}")
 
-        if projects:
-            # Extract information from each entry
-            for entry in projects:
-                name = entry.split('/')[-2]
-                entry_all = {}
-                soup = get_soup(entry)
-                if soup:
-                    entry_all['last_update'] = get_lastUpdate(soup)
-                    entry_all['description'] = get_description(soup)
-                    info = get_project_info(soup)
-                    entry_all['registered'] = info["registered"]
-                    entry_all['license'] = info["license"]
-                    entry_all['operating_systems'] = get_OS(soup)
-                    entry_all['repository'] = 'https://sourceforge.net/projects/' + name
-                    entry_all['homepage'] = get_homepage(soup)
-                    entry_all['name'] = name
+        logging.info(f"Number of bioinformatics linux projects in SourceForge: {len(projects)}")
 
-                    identifier = f"sourceforge/{name}//"
-                    tool = {
-                        'data': entry_all,
-                        '_id' : identifier,
-                        '@data_source' : 'sourceforge',
-                        '@source_url' : 'https://sourceforge.net/projects/' + name
-                    }
-
-                    document_w_metadata = add_metadata_to_entry(identifier, tool, alambique)
-                    push_entry(document_w_metadata, alambique)
-                    
-                else:
-                    logging.warning(f"no soup - empty")
-            
-        else:
-            logging.exception("Exception occurred")
-            logging.error('error - crucial_object_empty')
+        if not projects:
             logging.error('No projects to process. Exiting...')
             logging.info("state_importation - 2")
-            exit(1)
-        
+            sys.exit(1)
+
+        for entry in projects:
+            name = entry.rstrip('/').split('/')[-1]
+            soup = get_soup(session, entry)
+
+            if soup:
+                info = get_project_info(soup)
+                entry_all = {
+                    'last_update': get_lastUpdate(soup),
+                    'description': get_description(soup),
+                    'registered': info["registered"],
+                    'license': info["license"],
+                    'operating_systems': get_OS(soup),
+                    'repository': f'https://sourceforge.net/projects/{name}',
+                    'homepage': get_homepage(soup),
+                    'name': name
+                }
+
+                identifier = f"sourceforge/{name}//"
+                tool = {
+                    'data': entry_all,
+                    '_id': identifier,
+                    '@data_source': 'sourceforge',
+                    '@source_url': f'https://sourceforge.net/projects/{name}'
+                }
+
+                document_w_metadata = add_metadata_to_entry(identifier, tool, alambique)
+                push_entry(document_w_metadata, alambique)
+            else:
+                logging.warning(f"Could not parse project page: {entry}")
+
     except Exception as e:
         logging.exception("Exception occurred")
         logging.error(f'error - {type(e).__name__}')
         logging.info("state_importation - 2")
-        exit(1)
+        sys.exit(1)
 
     else:
         logging.info("state_importation - 0")
-    
+
 
 if __name__ == "__main__":
     import_data()
