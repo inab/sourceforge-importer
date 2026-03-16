@@ -1,0 +1,20 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## [0.1.4] - 2026-03-16
+
+### Added
+- Retry and exponential backoff for SourceForge requests.
+- Reuse of a single HTTP session across requests.
+
+### Changed
+- Added polite delays between requests to reduce rate-limit errors.
+
+### Fixed
+- Better handling of HTTP 429 responses.
+
+## [0.1.3] - 2026-03-16
+
+### Added
+- Initial stable importer version.
