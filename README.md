@@ -1,8 +1,6 @@
 # SourceForge recipes importer 
 
-> ❗️⚙️ The data importation is run on a weekly basis using GitLab CI.
-
-This program extracts Bioinformatics software metadata from SourceForge and store it either in a JSON file or pushed to a MongoDB database.
+This program extracts Bioinformatics software metadata from SourceForge and push it to a MongoDB database.
 
 ## Set-up and Usage
 
