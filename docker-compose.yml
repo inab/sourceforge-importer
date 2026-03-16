@@ -1,0 +1,7 @@
+services:
+  sourceforge-importer:
+    image: ghcr.io/inab/sourceforge-importer:latest
+    container_name: sourceforge-importer
+    restart: "no"
+    env_file:
+      - .env
