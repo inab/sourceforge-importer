@@ -14,6 +14,7 @@ from request_utils import (
     reset_state,
     get_html,
     project_name_from_url,
+    write_project_count,
 )
 
 
@@ -157,20 +158,32 @@ def configure_logging(loglevel):
     )
 
 
-def get_soup(session, url, state, use_cache=True):
-    html = get_html(session, url, state, use_cache=use_cache)
+def get_soup(session, url, state, read_from_cache=True, write_to_cache=True):
+    html = get_html(
+        session=session,
+        url=url,
+        state=state,
+        read_from_cache=read_from_cache,
+        write_to_cache=write_to_cache,
+    )
     if html in ("RATE_LIMITED", "REQUEST_BUDGET_REACHED", None):
         return html
     return BeautifulSoup(html, "html5lib")
 
 
-def collect_project_urls(session, state, use_cache_for_listing):
+def collect_project_urls(session, state, resume):
     url = os.getenv("URL_SOURCEFORGE_PACKAGES", "https://sourceforge.net/directory/bio-informatics/")
     projects = []
 
     logging.info("Getting all entries from listing pages")
     while url:
-        soup = get_soup(session, url, state, use_cache=use_cache_for_listing)
+        soup = get_soup(
+            session=session,
+            url=url,
+            state=state,
+            read_from_cache=resume,
+            write_to_cache=True,
+        )
 
         if soup == "RATE_LIMITED":
             return "RATE_LIMITED", projects
@@ -211,14 +224,20 @@ def build_tool_document(name, soup):
     return identifier, tool
 
 
-def process_projects(projects, processed, session, state, alambique):
+def process_projects(projects, processed, session, state, alambique, resume):
     remaining_projects = [entry for entry in projects if project_name_from_url(entry) not in processed]
     logging.info(f"Already processed: {len(processed)}")
     logging.info(f"Remaining in this run: {len(remaining_projects)}")
 
     for entry in remaining_projects:
         name = project_name_from_url(entry)
-        soup = get_soup(session, entry, state, use_cache=True)
+        soup = get_soup(
+            session=session,
+            url=entry,
+            state=state,
+            read_from_cache=resume,
+            write_to_cache=True,
+        )
 
         if soup == "RATE_LIMITED":
             logging.error("Stopped due to repeated rate limiting. Progress has been saved.")
@@ -274,7 +293,7 @@ def import_data():
         result, projects = collect_project_urls(
             session=session,
             state=state,
-            use_cache_for_listing=args.resume,
+            resume=args.resume,
         )
 
         if result == "RATE_LIMITED":
@@ -284,15 +303,17 @@ def import_data():
 
         if result == "REQUEST_BUDGET_REACHED":
             logging.warning("Request budget reached while collecting listing pages.")
+            write_project_count(len(projects))
             logging.info("state_importation - 0")
             return
 
         if not projects:
-            logging.error("No projects to process. Exiting...")
+            logging.error("No projects were collected from SourceForge. Exiting...")
             logging.info("state_importation - 2")
             sys.exit(1)
 
         logging.info(f"Collected {len(projects)} project URLs from SourceForge")
+        write_project_count(len(projects))
 
         processing_result = process_projects(
             projects=projects,
@@ -300,6 +321,7 @@ def import_data():
             session=session,
             state=state,
             alambique=alambique,
+            resume=args.resume,
         )
 
         if processing_result == "RATE_LIMITED":

@@ -4,6 +4,7 @@ import random
 import shutil
 import time
 from pathlib import Path
+from urllib.parse import urlparse, parse_qs
 
 import requests
 
@@ -15,6 +16,9 @@ DEFAULT_HEADERS = {
 
 CHECKPOINT_FILE = Path("processed_sourceforge_projects.json")
 CACHE_DIR = Path("cache/sourceforge")
+LISTING_CACHE_DIR = CACHE_DIR / "listings"
+PROJECT_CACHE_DIR = CACHE_DIR / "projects"
+PROJECT_COUNT_FILE = Path("sourceforge_project_count.txt")
 
 
 def create_session():
@@ -51,17 +55,30 @@ def reset_state():
         CHECKPOINT_FILE.unlink()
     if CACHE_DIR.exists():
         shutil.rmtree(CACHE_DIR)
+    if PROJECT_COUNT_FILE.exists():
+        PROJECT_COUNT_FILE.unlink()
 
 
 def sanitize_filename(value: str) -> str:
     return "".join(c if c.isalnum() or c in ("-", "_", ".") else "_" for c in value)
 
 
+def project_name_from_url(url: str) -> str:
+    return url.rstrip("/").split("/")[-1]
+
+
 def cache_path_for_url(url: str) -> Path:
-    name = url.rstrip("/").split("/")[-1]
-    if not name:
-        name = "index"
-    return CACHE_DIR / f"{sanitize_filename(name)}.html"
+    parsed = urlparse(url)
+
+    if "/directory/" in parsed.path:
+        query = parse_qs(parsed.query)
+        page = query.get("page", ["1"])[0]
+        LISTING_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        return LISTING_CACHE_DIR / f"page_{page}.html"
+
+    name = project_name_from_url(url) or "index"
+    PROJECT_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    return PROJECT_CACHE_DIR / f"{sanitize_filename(name)}.html"
 
 
 def read_cached_html(url: str):
@@ -73,9 +90,13 @@ def read_cached_html(url: str):
 
 
 def write_cached_html(url: str, html: str):
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cache_file = cache_path_for_url(url)
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
     cache_file.write_text(html, encoding="utf-8")
+
+
+def write_project_count(count: int):
+    PROJECT_COUNT_FILE.write_text(f"{count}\n", encoding="utf-8")
 
 
 def request_with_backoff(session, url, state, max_retries=5, base_delay=10, timeout=30):
@@ -125,14 +146,18 @@ def request_with_backoff(session, url, state, max_retries=5, base_delay=10, time
 
             continue
 
+        if response.status_code == 404:
+            logging.warning(f"Received 404 for {url}")
+            return None
+
         logging.warning(f"Unexpected status {response.status_code} for {url}")
         return None
 
     return None
 
 
-def get_html(session, url, state, use_cache=True):
-    if use_cache:
+def get_html(session, url, state, read_from_cache=True, write_to_cache=True):
+    if read_from_cache:
         cached_html = read_cached_html(url)
         if cached_html is not None:
             return cached_html
@@ -143,11 +168,7 @@ def get_html(session, url, state, use_cache=True):
 
     html = response.text
 
-    if use_cache:
+    if write_to_cache:
         write_cached_html(url, html)
 
     return html
-
-
-def project_name_from_url(url: str) -> str:
-    return url.rstrip("/").split("/")[-1]
