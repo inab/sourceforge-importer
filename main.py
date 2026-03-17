@@ -179,7 +179,8 @@ def collect_project_urls(session, state, use_cache_for_listing):
             return "REQUEST_BUDGET_REACHED", projects
 
         if soup is None:
-            return None, projects
+            logging.warning(f"Could not retrieve listing page {url}. Assuming end of pagination.")
+            return "DONE", projects
 
         projects = get_entries(soup, projects)
         url = get_next(soup)
@@ -286,7 +287,7 @@ def import_data():
             logging.info("state_importation - 0")
             return
 
-        if result is None or not projects:
+        if not projects:
             logging.error("No projects to process. Exiting...")
             logging.info("state_importation - 2")
             sys.exit(1)
