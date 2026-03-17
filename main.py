@@ -1,242 +1,317 @@
-import requests
-import sys
-import os
-import logging
 import argparse
-import time
-import random
+import logging
+import os
+import sys
+
 from bs4 import BeautifulSoup
 
 from utils import push_entry, connect_db, add_metadata_to_entry
-
-
-DEFAULT_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (compatible; SourceForgeMetadataImporter/1.0; +your_email_or_project_url)",
-    "Accept-Language": "en-US,en;q=0.9",
-}
-
-
-def create_session():
-    session = requests.Session()
-    session.headers.update(DEFAULT_HEADERS)
-    return session
-
-
-def get_url(session, url, max_retries=5, base_delay=2, timeout=20):
-    for attempt in range(max_retries):
-        try:
-            response = session.get(url, timeout=timeout)
-        except requests.RequestException as e:
-            logging.warning(f"Request failed for {url}: {e}")
-            sleep_time = base_delay * (2 ** attempt) + random.uniform(0, 1)
-            logging.info(f"Sleeping {sleep_time:.2f}s before retry")
-            time.sleep(sleep_time)
-            continue
-
-        if response.status_code == 200:
-            # small polite delay even on success
-            time.sleep(random.uniform(1.0, 2.5))
-            return response
-
-        if response.status_code == 429:
-            retry_after = response.headers.get("Retry-After")
-            if retry_after is not None:
-                try:
-                    sleep_time = int(retry_after)
-                except ValueError:
-                    sleep_time = base_delay * (2 ** attempt)
-            else:
-                sleep_time = base_delay * (2 ** attempt) + random.uniform(0, 1)
-
-            logging.warning(f"429 Too Many Requests for {url}. Sleeping {sleep_time:.2f}s")
-            time.sleep(sleep_time)
-            continue
-
-        if response.status_code >= 500:
-            sleep_time = base_delay * (2 ** attempt) + random.uniform(0, 1)
-            logging.warning(f"Server error {response.status_code} for {url}. Sleeping {sleep_time:.2f}s")
-            time.sleep(sleep_time)
-            continue
-
-        logging.warning(f"Unexpected status {response.status_code} for {url}")
-        return None
-
-    logging.error(f"Max retries exceeded for {url}")
-    return None
-
-
-def get_soup(session, url):
-    response = get_url(session, url)
-    if response is not None:
-        return BeautifulSoup(response.text, "html5lib")
-    return None
+from request_utils import (
+    create_session,
+    build_state,
+    load_processed,
+    save_processed,
+    reset_state,
+    get_html,
+    project_name_from_url,
+)
 
 
 def get_entries(soup, projects):
-    results = soup.find_all('div', attrs={"class": "result-heading-texts"})
+    results = soup.find_all("div", attrs={"class": "result-heading-texts"})
     for entry in results:
-        e = entry.find('a')
-        if e and e.get('href'):
-            projects.append("https://sourceforge.net" + e['href'])
+        e = entry.find("a")
+        if e and e.get("href"):
+            projects.append("https://sourceforge.net" + e["href"])
     return projects
 
 
 def get_next(soup):
-    URL = os.getenv('URL_SOURCEFORGE_PACKAGES', 'https://sourceforge.net/directory/bio-informatics/')
+    base_url = os.getenv("URL_SOURCEFORGE_PACKAGES", "https://sourceforge.net/directory/bio-informatics/")
     try:
-        next_href = soup.find('li', attrs={"class": "pagination-next"}).find('a')['href']
-        page = next_href.split('/')[-1]
-        next_url = f'{URL}{page}'
-        return next_url
+        next_href = soup.find("li", attrs={"class": "pagination-next"}).find("a")["href"]
+        page = next_href.split("/")[-1]
+        return f"{base_url}{page}"
     except Exception:
         return None
 
 
-def get_lastUpdate(project_soup):
-    tag = project_soup.find('time', attrs={"class": "dateUpdated"})
-    return tag['datetime'] if tag and tag.has_attr('datetime') else None
+def get_last_update(project_soup):
+    tag = project_soup.find("time", attrs={"class": "dateUpdated"})
+    if tag and tag.has_attr("datetime"):
+        return tag["datetime"]
+    return None
 
 
 def get_description(project_soup):
-    description = project_soup.find('p', attrs={"itemprop": "description", "class": "description"})
-    return description.text.strip() if description else None
+    description = project_soup.find("p", attrs={"itemprop": "description", "class": "description"})
+    if description:
+        return description.text.strip()
+    return None
 
 
 def get_homepage(project_soup):
-    a = project_soup.find('a', attrs={"id": "homepage"})
-    return a['href'] if a and a.has_attr('href') else None
+    a = project_soup.find("a", attrs={"id": "homepage"})
+    if a and a.has_attr("href"):
+        return a["href"]
+    return None
 
 
 def get_project_info(project_soup):
     project_info = {
-        'license': [],
-        'registered': False,
-        'categories': []
+        "license": [],
+        "registered": False,
+        "categories": [],
     }
 
-    info = project_soup.find_all('section', attrs={"class": "project-info"})
+    info = project_soup.find_all("section", attrs={"class": "project-info"})
 
     for section in info:
         if section.header and section.header.h4:
-            if section.header.h4.text.strip() == 'Registered':
+            if section.header.h4.text.strip() == "Registered":
                 if section.section:
-                    project_info['registered'] = section.section.text.strip()
+                    project_info["registered"] = section.section.text.strip()
 
         elif section.h3:
             heading = section.h3.text.strip()
             if heading == "License":
-                project_info['license'] = [a.text.strip() for a in section.find_all("a")]
+                project_info["license"] = [a.text.strip() for a in section.find_all("a")]
             elif heading == "Categories":
                 for a in section.find_all("a"):
                     if a.span:
-                        project_info['categories'].append(a.span.text.strip())
+                        project_info["categories"].append(a.span.text.strip())
 
     return project_info
 
 
-def get_OS(project_soup):
-    OS = []
-    platforms = project_soup.find_all('div', attrs={"class": "platforms"})
+def get_os(project_soup):
+    operating_systems = []
+    platforms = project_soup.find_all("div", attrs={"class": "platforms"})
     for span in platforms:
         if span.meta:
             os_text = span.text.strip()
             if os_text:
-                OS.append(os_text)
+                operating_systems.append(os_text)
 
-    if OS:
-        return OS[0].split('\n')
+    if operating_systems:
+        return [x.strip() for x in operating_systems[0].split("\n") if x.strip()]
     return None
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        prog="",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+
+    parser.add_argument(
+        "--loglevel", "-l",
+        help="Set the logging level",
+        default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+    )
+
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume from previous checkpoint and reuse cached HTML pages."
+    )
+
+    parser.add_argument(
+        "--max-requests",
+        type=int,
+        default=700,
+        help="Maximum number of HTTP requests to perform in this run."
+    )
+
+    parser.add_argument(
+        "--min-delay",
+        type=float,
+        default=4.0,
+        help="Minimum polite delay between successful requests (seconds)."
+    )
+
+    parser.add_argument(
+        "--max-delay",
+        type=float,
+        default=8.0,
+        help="Maximum polite delay between successful requests (seconds)."
+    )
+
+    parser.add_argument(
+        "--max-consecutive-rate-limits",
+        type=int,
+        default=3,
+        help="Stop the run after this many consecutive 429/403/503 responses."
+    )
+
+    return parser.parse_args()
+
+
+def configure_logging(loglevel):
+    numeric_level = getattr(logging, loglevel.upper())
+    logging.basicConfig(
+        level=numeric_level,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        stream=sys.stdout
+    )
+
+
+def get_soup(session, url, state, use_cache=True):
+    html = get_html(session, url, state, use_cache=use_cache)
+    if html in ("RATE_LIMITED", "REQUEST_BUDGET_REACHED", None):
+        return html
+    return BeautifulSoup(html, "html5lib")
+
+
+def collect_project_urls(session, state, use_cache_for_listing):
+    url = os.getenv("URL_SOURCEFORGE_PACKAGES", "https://sourceforge.net/directory/bio-informatics/")
+    projects = []
+
+    logging.info("Getting all entries from listing pages")
+    while url:
+        soup = get_soup(session, url, state, use_cache=use_cache_for_listing)
+
+        if soup == "RATE_LIMITED":
+            return "RATE_LIMITED", projects
+
+        if soup == "REQUEST_BUDGET_REACHED":
+            return "REQUEST_BUDGET_REACHED", projects
+
+        if soup is None:
+            return None, projects
+
+        projects = get_entries(soup, projects)
+        url = get_next(soup)
+
+    return "DONE", projects
+
+
+def build_tool_document(name, soup):
+    info = get_project_info(soup)
+    entry_all = {
+        "last_update": get_last_update(soup),
+        "description": get_description(soup),
+        "registered": info["registered"],
+        "license": info["license"],
+        "operating_systems": get_os(soup),
+        "repository": f"https://sourceforge.net/projects/{name}",
+        "homepage": get_homepage(soup),
+        "name": name,
+    }
+
+    identifier = f"sourceforge/{name}//"
+    tool = {
+        "data": entry_all,
+        "_id": identifier,
+        "@data_source": "sourceforge",
+        "@source_url": f"https://sourceforge.net/projects/{name}",
+    }
+    return identifier, tool
+
+
+def process_projects(projects, processed, session, state, alambique):
+    remaining_projects = [entry for entry in projects if project_name_from_url(entry) not in processed]
+    logging.info(f"Already processed: {len(processed)}")
+    logging.info(f"Remaining in this run: {len(remaining_projects)}")
+
+    for entry in remaining_projects:
+        name = project_name_from_url(entry)
+        soup = get_soup(session, entry, state, use_cache=True)
+
+        if soup == "RATE_LIMITED":
+            logging.error("Stopped due to repeated rate limiting. Progress has been saved.")
+            save_processed(processed)
+            return "RATE_LIMITED"
+
+        if soup == "REQUEST_BUDGET_REACHED":
+            logging.warning("Reached request budget. Saving progress and stopping cleanly.")
+            save_processed(processed)
+            return "REQUEST_BUDGET_REACHED"
+
+        if soup is None:
+            logging.warning(f"Could not parse project page: {entry}")
+            continue
+
+        identifier, tool = build_tool_document(name, soup)
+        document_w_metadata = add_metadata_to_entry(identifier, tool, alambique)
+        push_entry(document_w_metadata, alambique)
+
+        processed.add(name)
+        save_processed(processed)
+        logging.info(f"Processed and saved: {name}")
+
+    return "DONE"
 
 
 def import_data():
     try:
-        parser = argparse.ArgumentParser(
-            prog='',
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter
-        )
-
-        parser.add_argument(
-            "--loglevel", "-l",
-            help="Set the logging level",
-            required=False,
-            default="INFO",
-            choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-        )
-
-        arguments = parser.parse_args()
-        numeric_level = getattr(logging, arguments.loglevel.upper())
-
-        logging.basicConfig(
-            level=numeric_level,
-            format='%(asctime)s - %(levelname)s - %(message)s',
-            stream=sys.stdout
-        )
+        args = parse_args()
+        configure_logging(args.loglevel)
 
         logging.info("state_importation - 1")
-        logging.info('connecting to database')
+        logging.info("connecting to database")
 
-        alambique = connect_db('alambique')
+        if not args.resume:
+            logging.info("Starting fresh: removing checkpoint and cache")
+            reset_state()
+        else:
+            logging.info("Resume mode enabled: keeping checkpoint and cache")
+
+        processed = load_processed(args.resume)
+
+        state = build_state(
+            max_requests=args.max_requests,
+            min_delay=args.min_delay,
+            max_delay=args.max_delay,
+            max_consecutive_rate_limits=args.max_consecutive_rate_limits,
+        )
+
+        alambique = connect_db("alambique")
         session = create_session()
 
-        logging.info('Getting all entries')
-        url = os.getenv('URL_SOURCEFORGE_PACKAGES', 'https://sourceforge.net/directory/bio-informatics/')
+        result, projects = collect_project_urls(
+            session=session,
+            state=state,
+            use_cache_for_listing=args.resume,
+        )
 
-        projects = []
-        while url:
-            response = get_url(session, url)
-            if response is None:
-                logging.warning(f"Could not retrieve page: {url}")
-                break
-
-            soup = BeautifulSoup(response.text, 'html5lib')
-            projects = get_entries(soup, projects)
-            url = get_next(soup)
-
-        logging.info(f"Number of bioinformatics linux projects in SourceForge: {len(projects)}")
-
-        if not projects:
-            logging.error('No projects to process. Exiting...')
+        if result == "RATE_LIMITED":
+            logging.error("Stopped while reading listing pages due to rate limiting.")
             logging.info("state_importation - 2")
             sys.exit(1)
 
-        for entry in projects:
-            name = entry.rstrip('/').split('/')[-1]
-            soup = get_soup(session, entry)
+        if result == "REQUEST_BUDGET_REACHED":
+            logging.warning("Request budget reached while collecting listing pages.")
+            logging.info("state_importation - 0")
+            return
 
-            if soup:
-                info = get_project_info(soup)
-                entry_all = {
-                    'last_update': get_lastUpdate(soup),
-                    'description': get_description(soup),
-                    'registered': info["registered"],
-                    'license': info["license"],
-                    'operating_systems': get_OS(soup),
-                    'repository': f'https://sourceforge.net/projects/{name}',
-                    'homepage': get_homepage(soup),
-                    'name': name
-                }
+        if result is None or not projects:
+            logging.error("No projects to process. Exiting...")
+            logging.info("state_importation - 2")
+            sys.exit(1)
 
-                identifier = f"sourceforge/{name}//"
-                tool = {
-                    'data': entry_all,
-                    '_id': identifier,
-                    '@data_source': 'sourceforge',
-                    '@source_url': f'https://sourceforge.net/projects/{name}'
-                }
+        logging.info(f"Collected {len(projects)} project URLs from SourceForge")
 
-                document_w_metadata = add_metadata_to_entry(identifier, tool, alambique)
-                push_entry(document_w_metadata, alambique)
-            else:
-                logging.warning(f"Could not parse project page: {entry}")
+        processing_result = process_projects(
+            projects=projects,
+            processed=processed,
+            session=session,
+            state=state,
+            alambique=alambique,
+        )
+
+        if processing_result == "RATE_LIMITED":
+            logging.info("state_importation - 2")
+            sys.exit(1)
+
+        logging.info("state_importation - 0")
 
     except Exception as e:
         logging.exception("Exception occurred")
-        logging.error(f'error - {type(e).__name__}')
+        logging.error(f"error - {type(e).__name__}: {e}")
         logging.info("state_importation - 2")
         sys.exit(1)
-
-    else:
-        logging.info("state_importation - 0")
 
 
 if __name__ == "__main__":
