@@ -12,12 +12,43 @@ This program extracts Bioinformatics software metadata from SourceForge and push
     pip install -r requirements.txt
     ```
 
-3. Execute the importer
+3. Execute the importer.
+
+    Start from scratch:
 
     ```sh
-    python3 main.py -l=[log-level]
-    ``` 
-    - `log-level` is the level of logging. It can be `DEBUG`, `INFO`, `WARNING`, `ERROR` or `CRITICAL`.
+    python3 main.py -l INFO
+    ```
+
+    Resume from a previous run:
+
+    ```sh
+    python3 main.py --resume -l INFO
+    ```
+
+### Options
+
+- `-l`, `--loglevel`: `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL`.
+- `--resume`: resume from a previous checkpoint and reuse cached pages.
+- `--max-requests`: maximum number of requests for the current run.
+- `--min-delay`: minimum delay between successful requests.
+- `--max-delay`: maximum delay between successful requests.
+- `--max-consecutive-rate-limits`: stop after this many consecutive `429`, `403`, or `503` responses.
+
+### Checkpoint and cache
+
+- Processed projects are stored in `processed_sourceforge_projects.json`.
+- Cached HTML pages are stored in `cache/sourceforge/`.
+
+When the importer is run with `--resume`, it reuses both. Without `--resume`, it starts from zero and clears previous checkpoint and cache data.
+
+### Why this importer works this way
+
+SourceForge may return rate-limit or anti-bot responses after a high number of requests. To make long imports more robust, the importer:
+- saves progress in a checkpoint file,
+- caches downloaded HTML locally,
+- limits the number of requests per run,
+- and allows interrupted runs to be resumed safely.
 
 > This program has been successfully executed using Python 3.8 and 3.9.
 
