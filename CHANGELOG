@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.5] - 2026-03-17
+
+### Added
+- Resume mode for interrupted imports (`--resume`).
+- Checkpoint file for processed projects (`processed_sourceforge_projects.json`).
+- Local cache for downloaded SourceForge pages (`cache/`).
+- Request budget and configurable delays to reduce rate limiting (`--min-delay` and `--max-delay`).
+
+### Changed
+- Refactored HTTP request handling into helper utilities.
+- Updated README to document resume mode, cache, and checkpoint usage.
+
+### Fixed
+- Improved handling of `429`, `403`, and `503` responses.
+- Reduced the risk of losing progress during long SourceForge import runs.
+
+
 ## [0.1.4] - 2026-03-16
 
 ### Added
