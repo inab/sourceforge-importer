@@ -164,7 +164,7 @@ def connect_db(collection_name: str):
     load_dotenv()
     # variables come from .env file
     mongoHost = os.getenv('MONGO_HOST', default='localhost')
-    mongoPort = os.getenv('MONGO_PORT', default='27017')
+    mongoPort = os.getenv('MONGO_PORT', default='27018')
     mongoUser = os.getenv('MONGO_USER')
     mongoPass = os.getenv('MONGO_PASS')
     mongoAuthSrc = os.getenv('MONGO_UTH_SRC', default='admin')

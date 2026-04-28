@@ -121,14 +121,14 @@ def parse_args():
     parser.add_argument(
         "--max-requests",
         type=int,
-        default=700,
+        default=1000,
         help="Maximum number of HTTP requests to perform in this run."
     )
 
     parser.add_argument(
         "--min-delay",
         type=float,
-        default=4.0,
+        default=3.0,
         help="Minimum polite delay between successful requests (seconds)."
     )
 
